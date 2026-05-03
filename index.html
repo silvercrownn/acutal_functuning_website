@@ -262,7 +262,7 @@
   });
 })();
 
-// Skill ring animation on page load
+/* Skill ring animation on page load */
 (function(){
   const skills = document.querySelectorAll('.skill');
   if (skills.length === 0) return;
@@ -283,6 +283,146 @@
     setTimeout(() => {
       circle.style.strokeDashoffset = -circumference * (1 - Math.min(Math.max(percent, 0), 100) / 100);
     }, 200);
+  });
+})();
+
+/* Weather + Location demo (geolocation -> backend -> Open-Meteo) */
+(function(){
+  const btn = document.getElementById('getLocationBtn');
+  const coordinatesEl = document.getElementById('coordinates');
+  const weatherInfoEl = document.getElementById('weatherInfo');
+  const apiResponseEl = document.getElementById('apiResponse');
+
+  if (!btn || !coordinatesEl || !weatherInfoEl || !apiResponseEl) return;
+
+  const OPEN_METEO_BASE = 'https://api.open-meteo.com/v1/forecast';
+  const LOCATION_API_ORIGIN = 'http://localhost:3000';
+
+  function showError(message) {
+    coordinatesEl.innerHTML = '<span class="error-text">' + String(message || 'Request failed.') + '</span>';
+    apiResponseEl.innerHTML = '<span class="error-text">Request not sent.</span>';
+  }
+
+  function getWeatherDescription(weatherCode) {
+    const weatherMap = {
+      0: 'Clear sky',
+      1: 'Mainly clear',
+      2: 'Partly cloudy',
+      3: 'Overcast',
+      45: 'Fog',
+      48: 'Depositing rime fog',
+      51: 'Light drizzle',
+      53: 'Moderate drizzle',
+      55: 'Dense drizzle',
+      56: 'Light freezing drizzle',
+      57: 'Dense freezing drizzle',
+      61: 'Slight rain',
+      63: 'Moderate rain',
+      65: 'Heavy rain',
+      66: 'Light freezing rain',
+      67: 'Heavy freezing rain',
+      71: 'Slight snowfall',
+      73: 'Moderate snowfall',
+      75: 'Heavy snowfall',
+      77: 'Snow grains',
+      80: 'Slight rain showers',
+      81: 'Moderate rain showers',
+      82: 'Violent rain showers',
+      85: 'Slight snow showers',
+      86: 'Heavy snow showers',
+      95: 'Thunderstorm',
+      96: 'Thunderstorm with slight hail',
+      99: 'Thunderstorm with heavy hail'
+    };
+
+    return weatherMap[weatherCode] || 'Unknown weather';
+  }
+
+  async function sendLocation(latitude, longitude) {
+    const primaryUrl = window.location.origin + '/api/location';
+    const secondaryUrl = LOCATION_API_ORIGIN + '/api/location';
+    const payload = { latitude, longitude };
+
+    async function post(url) {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'API request failed.');
+      return data;
+    }
+
+    try {
+      return await post(primaryUrl);
+    } catch (err) {
+      // fallback for local testing
+      return await post(secondaryUrl);
+    }
+  }
+
+  async function fetchWeather(latitude, longitude) {
+    const weatherUrl =
+      OPEN_METEO_BASE +
+      '?latitude=' + encodeURIComponent(latitude) +
+      '&longitude=' + encodeURIComponent(longitude) +
+      '&current=temperature_2m,apparent_temperature,wind_speed_10m,weather_code';
+
+    const response = await fetch(weatherUrl);
+    const data = await response.json();
+
+    if (!response.ok || !data.current) {
+      throw new Error('Failed to load weather data.');
+    }
+
+    const current = data.current;
+    return {
+      weather: getWeatherDescription(current.weather_code),
+      temperature_c: current.temperature_2m,
+      feels_like_c: current.apparent_temperature,
+      wind_kmh: current.wind_speed_10m
+    };
+  }
+
+  btn.addEventListener('click', () => {
+    if (!navigator.geolocation) {
+      showError('Geolocation is not supported by your browser.');
+      return;
+    }
+
+    coordinatesEl.textContent = 'Getting your location...';
+    weatherInfoEl.textContent = 'Loading weather...';
+    apiResponseEl.textContent = 'Waiting for API request...';
+
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        const latitude = position.coords.latitude;
+        const longitude = position.coords.longitude;
+
+        coordinatesEl.textContent = JSON.stringify({ latitude, longitude }, null, 2);
+
+        try {
+          const [apiData, weatherDetails] = await Promise.all([
+            sendLocation(latitude, longitude),
+            fetchWeather(latitude, longitude)
+          ]);
+
+          apiResponseEl.textContent = JSON.stringify(apiData, null, 2);
+          weatherInfoEl.textContent = JSON.stringify(weatherDetails, null, 2);
+        } catch (error) {
+          apiResponseEl.innerHTML = '<span class="error-text">' + (error?.message || 'Failed.') + '</span>';
+
+          if (weatherInfoEl.textContent === 'Loading weather...') {
+            weatherInfoEl.innerHTML = '<span class="error-text">' + (error?.message || 'Failed to load weather data.') + '</span>';
+          }
+        }
+      },
+      (error) => {
+        showError('Unable to get location: ' + (error?.message || 'Unknown error'));
+      }
+    );
   });
 })();
 </script>
