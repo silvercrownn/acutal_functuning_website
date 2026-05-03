@@ -305,6 +305,13 @@
     weatherInfoEl.innerHTML = '<span class="error-text">' + String(message || 'Failed to load weather.') + '</span>';
   }
 
+  function showError(message) {
+    const msg = String(message || 'Request failed.');
+    coordinatesEl.innerHTML = '<span class="error-text">' + msg + '</span>';
+    weatherInfoEl.innerHTML = '<span class="error-text">Weather not loaded.</span>';
+    apiResponseEl.innerHTML = '<span class="error-text">Request not sent.</span>';
+  }
+
   function getWeatherDescription(weatherCode) {
     const weatherMap = {
       0: 'Clear sky',
