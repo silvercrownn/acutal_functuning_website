@@ -142,7 +142,7 @@
         </div>
 
         <p class="weather-demo-note" role="note">
-          Note: This uses your browser geolocation + the backend at <code>http://localhost:3000</code>.
+          Note: Weather is loaded from Open‑Meteo. If <code>/api/location</code> exists on the same domain, we’ll also send your coordinates to it.
         </p>
       </div>
     </section>
@@ -296,11 +296,13 @@
   if (!btn || !coordinatesEl || !weatherInfoEl || !apiResponseEl) return;
 
   const OPEN_METEO_BASE = 'https://api.open-meteo.com/v1/forecast';
-  const LOCATION_API_ORIGIN = 'http://localhost:3000';
 
-  function showError(message) {
-    coordinatesEl.innerHTML = '<span class="error-text">' + String(message || 'Request failed.') + '</span>';
-    apiResponseEl.innerHTML = '<span class="error-text">Request not sent.</span>';
+  function setApiError(message) {
+    apiResponseEl.innerHTML = '<span class="error-text">' + String(message || 'Request failed.') + '</span>';
+  }
+
+  function setWeatherError(message) {
+    weatherInfoEl.innerHTML = '<span class="error-text">' + String(message || 'Failed to load weather.') + '</span>';
   }
 
   function getWeatherDescription(weatherCode) {
@@ -338,29 +340,21 @@
     return weatherMap[weatherCode] || 'Unknown weather';
   }
 
+  // Optional: call your backend if it exists on the same domain.
+  // Weather will still work even if this fails.
   async function sendLocation(latitude, longitude) {
-    const primaryUrl = window.location.origin + '/api/location';
-    const secondaryUrl = LOCATION_API_ORIGIN + '/api/location';
+    const url = window.location.origin + '/api/location';
     const payload = { latitude, longitude };
 
-    async function post(url) {
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
 
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || 'API request failed.');
-      return data;
-    }
-
-    try {
-      return await post(primaryUrl);
-    } catch (err) {
-      // fallback for local testing
-      return await post(secondaryUrl);
-    }
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || 'API request failed.');
+    return data;
   }
 
   async function fetchWeather(latitude, longitude) {
@@ -403,20 +397,30 @@
 
         coordinatesEl.textContent = JSON.stringify({ latitude, longitude }, null, 2);
 
-        try {
-          const [apiData, weatherDetails] = await Promise.all([
-            sendLocation(latitude, longitude),
-            fetchWeather(latitude, longitude)
-          ]);
+        let apiData = null;
 
+        // Weather should work even if /api/location is missing.
+        // 1) Try backend (optional)
+        try {
+          apiData = await sendLocation(latitude, longitude);
           apiResponseEl.textContent = JSON.stringify(apiData, null, 2);
+        } catch (error) {
+          apiResponseEl.textContent = JSON.stringify(
+            {
+              note: 'Backend /api/location not reachable; weather still loaded from Open-Meteo.',
+              error: error && error.message ? error.message : String(error)
+            },
+            null,
+            2
+          );
+        }
+
+        // 2) Always fetch weather
+        try {
+          const weatherDetails = await fetchWeather(latitude, longitude);
           weatherInfoEl.textContent = JSON.stringify(weatherDetails, null, 2);
         } catch (error) {
-          apiResponseEl.innerHTML = '<span class="error-text">' + (error?.message || 'Failed.') + '</span>';
-
-          if (weatherInfoEl.textContent === 'Loading weather...') {
-            weatherInfoEl.innerHTML = '<span class="error-text">' + (error?.message || 'Failed to load weather data.') + '</span>';
-          }
+          setWeatherError(error && error.message ? error.message : 'Failed to load weather data.');
         }
       },
       (error) => {
