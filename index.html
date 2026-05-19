@@ -234,10 +234,16 @@
   }
 
   function calculate() {
-    let formula = display.value.replace(/×/g, '*').replace(/÷/g, '/').replace(/−/g, '-');
+    const formula = display.value.replace(/×/g, '*').replace(/÷/g, '/').replace(/−/g, '-').trim();
+
+    if (!formula || !/^[\d.+\-*/()\s]+$/.test(formula)) {
+      display.value = 'Error';
+      return;
+    }
+
     try {
-      const result = new Function('return ' + formula)();
-      display.value = String(result);
+      const result = Function('"use strict"; return (' + formula + ');')();
+      display.value = Number.isFinite(result) ? String(result) : 'Error';
     } catch (err) {
       display.value = 'Error';
     }
@@ -277,12 +283,14 @@
     const circumference = 2 * Math.PI * radius;
 
     circle.style.strokeDasharray = circumference;
-    circle.style.strokeDashoffset = -circumference;
-    circle.style.transition = 'stroke-dashoffset 1.8s cubic-bezier(0.22, 1, 0.36, 1)';
+    circle.style.strokeDashoffset = circumference;
+    circle.style.opacity = '0.35';
+    circle.style.transition = 'stroke-dashoffset 1.8s cubic-bezier(0.22, 1, 0.36, 1), opacity 400ms ease';
 
-    setTimeout(() => {
-      circle.style.strokeDashoffset = -circumference * (1 - Math.min(Math.max(percent, 0), 100) / 100);
-    }, 200);
+    requestAnimationFrame(() => {
+      circle.style.opacity = '0.96';
+      circle.style.strokeDashoffset = circumference * (1 - Math.min(Math.max(percent, 0), 100) / 100);
+    });
   });
 })();
 
